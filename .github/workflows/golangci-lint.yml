@@ -1,0 +1,36 @@
+name: golangci-lint
+on:
+  push:
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "**.go"
+      - ".github/workflows/golangci-lint.yml"
+      - ".golangci.yml"  
+  pull_request:
+
+permissions:
+  contents: read  # 基础代码读取权限
+
+jobs:
+  lint:
+    permissions:
+      contents: read   # 拉取代码
+      pull-requests: read  # 读取 PR 信息（供 golangci-lint 使用）
+
+    name: Run golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # 使用最新稳定版
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.20" 
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.58.3 
+          args: --verbose --timeout 5m

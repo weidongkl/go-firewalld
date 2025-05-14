@@ -1,0 +1,27 @@
+run:
+#  skip-dirs:
+#    - internal # 忽略 internal 目录
+#  skip-files:
+#    - "*pb.go" # 忽略由 protobuf 生成的文件
+
+linters-settings:
+  errcheck:
+    check-blank: false # 允许使用 _ 接收 error，从而不判断 error
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - varcheck
+    - structcheck
+    - typecheck
+    - ineffassign
+    - deadcode
+    - gosimple
+    - unconvert
+    - misspell
+  disable:
+    - lll # 禁用长行检查
