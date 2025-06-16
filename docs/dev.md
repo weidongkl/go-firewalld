@@ -6,9 +6,9 @@ This section is empty.
 
 ```go
 var (
-	NotSupportPermanentErr = errors.New("this method not supported permanent call")
-	UnimplementedErr       = errors.New("this method is not yet implemented")
-	NotSupportRuntimeErr   = errors.New("this method not supported Runtime call")
+	ErrNotSupportPermanent = errors.New("this method not supported permanent call")
+	ErrUnimplemented       = errors.New("this method is not yet implemented")
+	ErrNotSupportRuntime   = errors.New("this method not supported Runtime call")
 )
 ```
 

@@ -1,8 +1,9 @@
 package main
 
 import (
-	"gitee.com/weidongkl/go-firewalld"
 	"log"
+
+	"gitee.com/weidongkl/go-firewalld"
 )
 
 func main() {
@@ -20,14 +21,14 @@ func main() {
 	// firewall-cmd  --delete-zone testzone --permanent
 	err = client.AddZone(testZoneSetting)
 	if err != nil {
-		log.Fatalf("set zone failed: %s\n", err)
+		log.Printf("set zone failed: %s\n", err)
 	}
 	names, err := client.GetZoneNames()
 	if err != nil {
 		log.Fatalf("set zone failed: %s\n", err)
 	}
 	log.Printf("zone list: %#v\n", names)
-	zoneSetting, err := client.GetZoneSettings("testzone")
+	zoneSetting, err := client.GetZoneSettings2("testzone")
 	if err != nil {
 		log.Fatalf("get zone settings failed: %s\n", err)
 	}

@@ -5,60 +5,71 @@ Copyright © 2024 weidongkl <weidongkx@gmail.com>
 package firewalld
 
 import (
+	"fmt"
+
 	"github.com/godbus/dbus"
 )
+
+// Helper function to handle common DBus call patterns
+func (c *Client) handleCall(call *dbus.Call, err error) error {
+	if err != nil {
+		return fmt.Errorf("dbus call failed: %w", err)
+	}
+	return call.Err
+}
+
+// Helper function to handle DBus calls that return a single value
+func (c *Client) handleDBusCall(call *dbus.Call, err error, result interface{}) error {
+	if err != nil {
+		return fmt.Errorf("dbus call failed: %w", err)
+	}
+	if err := call.Store(result); err != nil {
+		return fmt.Errorf("failed to store result: %w", err)
+	}
+	return nil
+}
 
 // Reload firewall rules and keep state information.
 // Current permanent configuration will become new runtime configuration,
 // i.e. all runtime only changes done until reload are lost with reload if
 // they have not been also in permanent configuration.
-func (c *Client) Reload() (err error) {
+func (c *Client) Reload() error {
 	call, err := c.CallMethod("reload")
-	if err != nil {
-		return err
-	}
-	return call.Err
+	return c.handleCall(call, err)
 }
 
 // RuntimeToPermanent Make runtime settings permanent.
 // Replaces permanent settings with runtime settings for zones, services, icmptypes,
 // direct (deprecated) and policies (lockdown whitelist).
-func (c *Client) RuntimeToPermanent() (err error) {
+func (c *Client) RuntimeToPermanent() error {
 	call, err := c.CallMethod("runtimeToPermanent")
-	if err != nil {
-		return err
-	}
-	return call.Err
+	return c.handleCall(call, err)
 }
 
 // CheckPermanentConfig Run checks on the permanent configuration.
 // This is most useful if changes were made manually to configuration files.
-func (c *Client) CheckPermanentConfig() (err error) {
+func (c *Client) CheckPermanentConfig() error {
 	call, err := c.CallMethod("checkPermanentConfig")
-	if err != nil {
-		return err
-	}
-	return call.Err
+	return c.handleCall(call, err)
 }
 
-// ListServices  Return array of service names (s)
-func (c *Client) ListServices() (services []string, err error) {
+// ListServices Return array of service names
+func (c *Client) ListServices() ([]string, error) {
 	if c.opt.Permanent {
 		return c.GetServiceNames()
-	} else {
-		call, err := c.CallMethod("listServices")
-		if err != nil {
-			return services, err
-		}
-		err = call.Store(&services)
-		return services, err
 	}
+	var services []string
+	call, err := c.CallMethod("listServices")
+	if err := c.handleDBusCall(call, err, &services); err != nil {
+		return nil, err
+	}
+	return services, nil
 }
 
 // ListServicesPath  Return array of objects paths (o) of services in permanent configuration.
 func (c *Client) ListServicesPath() (servicesPath []string, err error) {
 	if !c.opt.Permanent {
-		return nil, NotSupportRuntimeErr
+		return nil, ErrNotSupportRuntime
 	} else {
 		call, err := c.CallMethod("listServices")
 		if err != nil {
@@ -70,9 +81,9 @@ func (c *Client) ListServicesPath() (servicesPath []string, err error) {
 }
 
 // AddZone Add zone with given settings into permanent configuration.
-func (c *Client) AddZone(zoneSet ZoneSetting) (err error) {
+func (c *Client) AddZone(zoneSet ZoneSetting) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	zsSlice := []interface{}{
 		zoneSet.Version,
@@ -93,57 +104,53 @@ func (c *Client) AddZone(zoneSet ZoneSetting) (err error) {
 		zoneSet.IcmpBlockInversion,
 	}
 	call, err := c.CallMethod("addZone", zoneSet.Name, zsSlice)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // GetServiceByName Return object path (permanent configuration) of service
 // with given name.
-func (c *Client) GetServiceByName(service string) (path string, err error) {
+func (c *Client) GetServiceByName(service string) (string, error) {
 	if !c.opt.Permanent {
-		return path, NotSupportRuntimeErr
+		return "", ErrNotSupportRuntime
 	}
+	var path string
 	call, err := c.CallMethod("getServiceByName", service)
-	if err != nil {
-		return path, err
+	if err := c.handleDBusCall(call, err, &path); err != nil {
+		return "", err
 	}
-	err = call.Store(&path)
-	return path, err
+	return path, nil
 }
 
 // GetServiceNames  Return list of service names (permanent configuration).
-func (c *Client) GetServiceNames() (names []string, err error) {
+func (c *Client) GetServiceNames() ([]string, error) {
 	if !c.opt.Permanent {
-		return names, NotSupportRuntimeErr
+		return nil, ErrNotSupportRuntime
 	}
+	var names []string
 	call, err := c.CallMethod("getServiceNames")
-	if err != nil {
-		return names, err
+	if err := c.handleDBusCall(call, err, &names); err != nil {
+		return nil, err
 	}
-	err = call.Store(&names)
-	return names, err
+	return names, nil
 }
 
 // GetZoneByName Return object path (permanent configuration) of zone with given name.
-func (c *Client) GetZoneByName(zone string) (path string, err error) {
+func (c *Client) GetZoneByName(zone string) (string, error) {
 	if !c.opt.Permanent {
-		return path, NotSupportRuntimeErr
+		return "", ErrNotSupportRuntime
 	}
+	var path string
 	call, err := c.CallMethod("getZoneByName", zone)
-	if err != nil {
-		return path, err
+	if err := c.handleDBusCall(call, err, &path); err != nil {
+		return "", err
 	}
-	err = call.Store(&path)
-	return path, err
+	return path, nil
 }
 
 // GetZoneNames  Return list of zone names (permanent configuration).
 func (c *Client) GetZoneNames() (names []string, err error) {
 	if !c.opt.Permanent {
-		return names, NotSupportRuntimeErr
+		return names, ErrNotSupportRuntime
 	}
 	call, err := c.CallMethod("getZoneNames")
 	if err != nil {
@@ -154,33 +161,33 @@ func (c *Client) GetZoneNames() (names []string, err error) {
 }
 
 // GetZoneOfSource Return name of zone the source is bound to or empty string.
-func (c *Client) GetZoneOfSource(source string) (zoneName string, err error) {
+func (c *Client) GetZoneOfSource(source string) (string, error) {
 	if !c.opt.Permanent {
-		return zoneName, NotSupportRuntimeErr
+		return "", ErrNotSupportRuntime
 	}
+	var zoneName string
 	call, err := c.CallMethod("getZoneOfSource", source)
-	if err != nil {
-		return zoneName, err
+	if err := c.handleDBusCall(call, err, &zoneName); err != nil {
+		return "", err
 	}
-	err = call.Store(&zoneName)
-	return zoneName, err
+	return zoneName, nil
 }
 
 // GetServiceSettings Return permanent settings of a service.
-func (c *Client) GetServiceSettings(svc string) (svcSet ServiceSetting, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetServiceSettings(svc string) (ServiceSetting, error) {
+	var svcSet ServiceSetting
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentServiceMethod2(svc, "getSettings")
 	} else {
 		call, err = c.CallMethod("getServiceSettings", svc)
 	}
-	if err != nil {
-		return svcSet, err
+	if err := c.handleDBusCall(call, err, &svcSet); err != nil {
+		return ServiceSetting{}, err
 	}
-	err = call.Store(&svcSet)
-	return svcSet, err
+	return svcSet, nil
 }
 
 // AddForwardPort Add the IPv4 forward port into zone. If zone is empty, use default zone. The port can either be a
@@ -197,10 +204,7 @@ func (c *Client) AddForwardPort(zone, port, protocol, toPort, toAddress string, 
 	} else {
 		call, err = c.CallRuntimeZoneMethod("addForwardPort", zone, port, protocol, toPort, toAddress, timeout)
 	}
-	if err != nil {
-		return err
-	}
-	return call.Err
+	return c.handleCall(call, err)
 }
 
 // AddInterface Bind interface with zone.
@@ -214,11 +218,7 @@ func (c *Client) AddInterface(zone, interFace string) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("addInterface", zone, interFace)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // AddPort when the timeout((The timeout configuration does not take effect for permanent
@@ -233,11 +233,7 @@ func (c *Client) AddPort(zone, port, protocol string, timeout int) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("addPort", zone, port, protocol, timeout)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // AddProtocol add protocol into zone. The protocol can be any protocol supported by the system. Please have a look at /etc/protocols for supported protocols.
@@ -333,170 +329,166 @@ func (c *Client) AddSourcePort(zone, port, protocol string, timeout int) error {
 
 // GetActiveZones Return dictionary of currently active zones altogether with interfaces and sources used in these
 // zones. Active zones are zones, that have a binding to an interface or source.
-func (c *Client) GetActiveZones() (azs map[string]ActivateZone, err error) {
+func (c *Client) GetActiveZones() (map[string]ActivateZone, error) {
+	var (
+		azMap = make(map[string]map[string][]string)
+		azs   = make(map[string]ActivateZone)
+	)
 	call, err := c.CallRuntimeZoneMethod("getActiveZones")
-	if err != nil {
-		return azs, err
+	if err := c.handleDBusCall(call, err, &azMap); err != nil {
+		return nil, err
 	}
-	azMap := make(map[string]map[string][]string)
-	err = call.Store(&azMap)
-	if err != nil {
-		return azs, err
-	}
-	azs = make(map[string]ActivateZone)
 	for zoneName, zone := range azMap {
 		azs[zoneName] = ActivateZone{
 			Interfaces: zone["interfaces"],
 			Sources:    zone["sources"],
 		}
 	}
-	return azs, err
+	return azs, nil
 }
 
 // GetForwardPorts Get list of (port, protocol, toport, toaddr) defined in zone.
-func (c *Client) GetForwardPorts(zone string) (fps ForwardPorts, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetForwardPorts(zone string) (ForwardPorts, error) {
+	var fps ForwardPorts
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getForwardPorts")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getForwardPorts", zone)
 	}
-	if err != nil {
-		return fps, err
+	if err := c.handleDBusCall(call, err, &fps); err != nil {
+		return nil, err
 	}
-	err = call.Store(&fps)
-	return fps, err
+	return fps, nil
 }
 
 // GetInterfaces Return array of interfaces (s) previously bound with zone.
-func (c *Client) GetInterfaces(zone string) (Interfaces []string, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetInterfaces(zone string) ([]string, error) {
+	var interfaces []string
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getInterfaces")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getInterfaces", zone)
 	}
-	if err != nil {
-		return Interfaces, err
+	if err := c.handleDBusCall(call, err, &interfaces); err != nil {
+		return nil, err
 	}
-	err = call.Store(&Interfaces)
-	return Interfaces, err
+	return interfaces, nil
 }
 
 // GetPorts Return array of ports (2-tuple of port and protocol) previously enabled in zone
-func (c *Client) GetPorts(zone string) (ports Ports, err error) {
+func (c *Client) GetPorts(zone string) (Ports, error) {
 	var (
-		call *dbus.Call
+		rawPorts [][]string
+		ports    Ports
+		call     *dbus.Call
+		err      error
 	)
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getPorts")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getPorts", zone)
 	}
-	if err != nil {
-		return ports, err
-	}
-	var _ports [][]interface{}
-	err = call.Store(&_ports)
-	if err != nil {
+	if err := c.handleDBusCall(call, err, &rawPorts); err != nil {
 		return nil, err
 	}
-	ports, err = convertToPorts(_ports)
+	ports, err = convertToPorts(rawPorts)
 	return ports, err
 }
 
 // GetProtocols Return array of protocols (s) previously enabled in zone.
-func (c *Client) GetProtocols(zone string) (protocols []string, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetProtocols(zone string) ([]string, error) {
+	var protocols []string
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getProtocols")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getProtocols", zone)
 	}
-	if err != nil {
-		return protocols, err
+	if err := c.handleDBusCall(call, err, &protocols); err != nil {
+		return nil, err
 	}
-	err = call.Store(&protocols)
-	return protocols, err
+	return protocols, nil
 }
 
 // GetRichRules Get list of rich-language rules in zone.
-func (c *Client) GetRichRules(zone string) (richRules []string, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetRichRules(zone string) ([]string, error) {
+	var rules []string
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getRichRules")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getRichRules", zone)
 	}
-	if err != nil {
-		return richRules, err
+	if err := c.handleDBusCall(call, err, &rules); err != nil {
+		return nil, err
 	}
-	err = call.Store(&richRules)
-	return richRules, err
+	return rules, nil
 }
 
 // GetServices Get list of service names used in zone.
-func (c *Client) GetServices(zone string) (services []string, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetServices(zone string) ([]string, error) {
+	var services []string
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getServices")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getServices", zone)
 	}
-	if err != nil {
-		return services, err
+	if err := c.handleDBusCall(call, err, &services); err != nil {
+		return nil, err
 	}
-	err = call.Store(&services)
-	return services, err
+	return services, nil
 }
 
 // GetSourcePorts Get list of (port, protocol) defined in zone.
-func (c *Client) GetSourcePorts(zone string) (ports Ports, err error) {
+func (c *Client) GetSourcePorts(zone string) (Ports, error) {
 	var (
-		call *dbus.Call
+		rawPorts [][]string
+		ports    Ports
+		call     *dbus.Call
+		err      error
 	)
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getSourcePorts")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getSourcePorts", zone)
 	}
-	if err != nil {
-		return ports, err
-	}
-	var _ports [][]interface{}
-	err = call.Store(&_ports)
-	if err != nil {
+	if err := c.handleDBusCall(call, err, &rawPorts); err != nil {
 		return nil, err
 	}
-	ports, err = convertToPorts(_ports)
+	ports, err = convertToPorts(rawPorts)
 	return ports, err
 }
 
 // GetSources Get list of source addresses bound to zone.
-func (c *Client) GetSources(zone string) (sources []string, err error) {
-	var (
-		call *dbus.Call
-	)
+func (c *Client) GetSources(zone string) ([]string, error) {
+	var sources []string
+	var call *dbus.Call
+	var err error
+
 	if c.opt.Permanent {
 		call, err = c.CallPermanentZoneMethod2(zone, "getSources")
 	} else {
 		call, err = c.CallRuntimeZoneMethod("getSources", zone)
 	}
-	if err != nil {
-		return sources, err
+	if err := c.handleDBusCall(call, err, &sources); err != nil {
+		return nil, err
 	}
-	err = call.Store(&sources)
-	return sources, err
+	return sources, nil
 }
 
 // RemoveForwardPort remove (port, protocol, toport, toaddr) from  list of forward ports of zone.
@@ -510,11 +502,7 @@ func (c *Client) RemoveForwardPort(zone, port, protocol, toPort, toAddress strin
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removeForwardPort", zone, port, protocol, toPort, toAddress)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // RemovePort If zone is empty, use default zone.
@@ -528,14 +516,10 @@ func (c *Client) RemovePort(zone, port, protocol string) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removePort", zone, port, protocol)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
-// RemoveProtocol remove protocol from zone.
+// RemoveProtocol Remove protocol from zone.
 func (c *Client) RemoveProtocol(zone, protocol string) error {
 	var (
 		err  error
@@ -546,11 +530,7 @@ func (c *Client) RemoveProtocol(zone, protocol string) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removeProtocol", zone, protocol)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // RemoveRichRule remove rule from list of rich-language rules  in zone.
@@ -564,11 +544,7 @@ func (c *Client) RemoveRichRule(zone, rule string) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removeRichRule", zone, rule)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // RemoveService remove service from list of services used in zone.
@@ -582,11 +558,7 @@ func (c *Client) RemoveService(zone, service string) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removeService", zone, service)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // RemoveSource remove source from list of source addresses  bound to zone.
@@ -600,11 +572,7 @@ func (c *Client) RemoveSource(zone, source string) error {
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removeSource", zone, source)
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // RemoveSourcePort remove (port, protocol) from list of source ports of zone.
@@ -617,86 +585,109 @@ func (c *Client) RemoveSourcePort(zone, port, protocol string) error {
 		call, err = c.CallPermanentZoneMethod2(zone, "removeSourcePort", port, protocol)
 	} else {
 		call, err = c.CallRuntimeZoneMethod("removeSourcePort", zone, port, protocol)
-
 	}
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // GetDefaultZone Return default zone.
-func (c *Client) GetDefaultZone() (defaultZone string, err error) {
+func (c *Client) GetDefaultZone() (string, error) {
 	if c.opt.Permanent {
-		return "", NotSupportPermanentErr
+		return "", ErrNotSupportPermanent
 	}
+	var defaultZone string
 	call, err := c.CallMethod("getDefaultZone")
-	if err != nil {
+	if err := c.handleDBusCall(call, err, &defaultZone); err != nil {
 		return "", err
 	}
-	err = call.Store(&defaultZone)
-	return defaultZone, err
+	return defaultZone, nil
 }
 
 // GetZones Return array of names (s) of predefined zones known to
 // current runtime environment.
-func (c *Client) GetZones() (zones []string, err error) {
-	var call *dbus.Call
+func (c *Client) GetZones() ([]string, error) {
 	if c.opt.Permanent {
-		return nil, NotSupportPermanentErr
-	} else {
-		call, err = c.CallRuntimeZoneMethod("getZones")
+		return nil, ErrNotSupportPermanent
 	}
-	if err != nil {
-		return zones, err
+	var zones []string
+	call, err := c.CallMethod("getZones")
+	if err := c.handleDBusCall(call, err, &zones); err != nil {
+		return nil, err
 	}
-	err = call.Store(&zones)
-	return
+	return zones, nil
 }
 
 // ListZones List object paths of zones known to permanent environment.
-func (c *Client) ListZones() (zonesPath []string, err error) {
+func (c *Client) ListZones() ([]string, error) {
 	if !c.opt.Permanent {
-		return nil, NotSupportRuntimeErr
+		return nil, ErrNotSupportRuntime
 	}
+	var zonesPath []string
 	call, err := c.CallMethod("listZones")
-	if err != nil {
-		return zonesPath, err
+	if err := c.handleDBusCall(call, err, &zonesPath); err != nil {
+		return nil, err
 	}
-	err = call.Store(&zonesPath)
-	return
+	return zonesPath, nil
 }
 
-func (c *Client) GetZoneSettings(zone string) (zs ZoneSetting, err error) {
-	call, err := c.CallMethod("getZoneSettings", zone)
-	if err != nil {
-		return zs, err
+// GetZoneSettings Return zone settings.
+func (c *Client) GetZoneSettings(zone string) (ZoneSetting, error) {
+	if c.opt.Permanent {
+		return ZoneSetting{}, ErrNotSupportPermanent
 	}
-	err = call.Store(&zs)
+	var (
+		zs   ZoneSetting
+		call *dbus.Call
+		err  error
+	)
+
+	call, err = c.CallMethod("getZoneSettings", zone)
+	if err := c.handleDBusCall(call, err, &zs); err != nil {
+		return ZoneSetting{}, err
+	}
+	return zs, nil
+}
+
+func (c *Client) GetZoneSettings2(zone string) (ZoneSetting, error) {
+	var (
+		zs   ZoneSetting
+		call *dbus.Call
+		err  error
+		sm   map[string]interface{}
+	)
+	if c.opt.Permanent {
+		call, err = c.CallPermanentZoneMethod2(zone, "getSettings2")
+	} else {
+		call, err = c.CallRuntimeZoneMethod("getZoneSettings2", zone)
+	}
+	if err := c.handleDBusCall(call, err, &sm); err != nil {
+		return ZoneSetting{}, err
+	}
+	zs, err = convertToZoneSetting(sm)
+	if zs.Name == "" {
+		zs.Name = zone
+	}
 	return zs, err
 }
 
-// not implemented yet
-//func (c *Client) GetZoneSettings2(zone string) (zs ZoneSetting, err error) {
-//	return zs, UnimplementedErr
-//}
+func (c *Client) GetSettings2(zone string) (ZoneSetting, error) {
+	if !c.opt.Permanent {
+		return ZoneSetting{}, ErrNotSupportRuntime
+	}
+	return c.GetZoneSettings2(zone)
+}
 
 // SetDefaultZone Set default zone for connections and interfaces where no zone has been selected to zone.
 // Setting the default zone changes the zone for the connections or interfaces,
 // that are using the default zone. This is a runtime and permanent change.
-func (c *Client) SetDefaultZone(zone string) (err error) {
+func (c *Client) SetDefaultZone(zone string) error {
 	call, err := c.CallMethod("setDefaultZone", zone)
-	if err != nil {
-		return err
-	}
-	return call.Err
+	return c.handleCall(call, err)
 }
 
 // SetForwardPorts Permanently set forward ports of zone
 func (c *Client) SetForwardPorts(zone string, fps ForwardPorts) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
@@ -707,17 +698,13 @@ func (c *Client) SetForwardPorts(zone string, fps ForwardPorts) error {
 		dpSlice = append(dpSlice, []string{fp.Port, fp.Protocol, fp.ToAddress, fp.ToPort})
 	}
 	call, err = c.CallPermanentZoneMethod2(zone, "setForwardPorts", dpSlice)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // SetPorts Permanently set ports of zone
 func (c *Client) SetPorts(zone string, ports Ports) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
@@ -728,68 +715,52 @@ func (c *Client) SetPorts(zone string, ports Ports) error {
 		psSlice = append(psSlice, []string{port.Port, port.Protocol})
 	}
 	call, err = c.CallPermanentZoneMethod2(zone, "setPorts", psSlice)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // SetProtocols Permanently set list of protocols used in zone to protocols.
 func (c *Client) SetProtocols(zone string, protocols []string) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
 		err  error
 	)
 	call, err = c.CallPermanentZoneMethod2(zone, "setProtocols", protocols)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // SetRichRules Permanently set list of rich-language rules to rules.
 func (c *Client) SetRichRules(zone string, rules []string) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
 		err  error
 	)
 	call, err = c.CallPermanentZoneMethod2(zone, "setRichRules", rules)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
-// SetServices Permanently set list of services used in zone to services.
+// SetServices Set services in zone.
 func (c *Client) SetServices(zone string, services []string) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
 		err  error
 	)
 	call, err = c.CallPermanentZoneMethod2(zone, "setServices", services)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
-// SetSourcePorts Permanently set source-ports of zone to list
+// SetSourcePorts Set source ports in zone.
 func (c *Client) SetSourcePorts(zone string, ports Ports) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
@@ -800,45 +771,37 @@ func (c *Client) SetSourcePorts(zone string, ports Ports) error {
 		psSlice = append(psSlice, []string{port.Port, port.Protocol})
 	}
 	call, err = c.CallPermanentZoneMethod2(zone, "setSourcePorts", psSlice)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+	return c.handleCall(call, err)
 }
 
 // SetSources Permanently set list of source addresses bound to zone to sources.
 func (c *Client) SetSources(zone string, sources []string) error {
 	if !c.opt.Permanent {
-		return NotSupportRuntimeErr
+		return ErrNotSupportRuntime
 	}
 	var (
 		call *dbus.Call
 		err  error
 	)
 	call, err = c.CallPermanentZoneMethod2(zone, "setSources", sources)
-	if err != nil {
-		return err
-	}
-	err = call.Err
-	return err
+
+	return c.handleCall(call, err)
 }
 
-// get zone object id by name
-func (c *Client) getZoneID(zone string) (zoneId int, err error) {
-	zonePath, err := c.GetZoneByName(zone)
+// getZoneID Get zone ID by name.
+func (c *Client) getZoneID(zone string) (int, error) {
+	path, err := c.GetZoneByName(zone)
 	if err != nil {
 		return 0, err
 	}
-	zoneId, err = getIdByPath(zonePath)
-	return zoneId, err
+	return getIdByPath(path)
 }
 
-func (c *Client) getServiceID(svc string) (svcId int, err error) {
-	svcPath, err := c.GetServiceByName(svc)
+// getServiceID Get service ID by name.
+func (c *Client) getServiceID(svc string) (int, error) {
+	path, err := c.GetServiceByName(svc)
 	if err != nil {
 		return 0, err
 	}
-	svcId, err = getIdByPath(svcPath)
-	return svcId, err
+	return getIdByPath(path)
 }
